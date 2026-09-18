@@ -1,0 +1,513 @@
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+
+local player = Players.LocalPlayer
+local camera = workspace.CurrentCamera
+local CoreGui = game:GetService("CoreGui")
+
+local movingPart = nil
+local followDistance = 10
+local followSpeed = 200
+local throwPower = 150
+local useCamera = false
+local lastPosition = nil
+
+local TelGUI
+local Frame
+local DistTextBox
+local DistPButton
+local Throw
+local DistNButton
+local CamFollow
+local TopBar
+local Label
+local CollapseButton
+local CloseButton
+
+local collapsed = false
+local unloaded = false
+local connections = {}
+
+local selectionBox = Instance.new("SelectionBox")
+selectionBox.Name = "TelSelBox"
+selectionBox.Color3 = Color3.fromRGB(0, 255, 0)
+selectionBox.LineThickness = 0.08
+selectionBox.SurfaceTransparency = 1
+selectionBox.Adornee = nil
+selectionBox.Parent = CoreGui
+
+local function stopMoving()
+    movingPart = nil
+    lastPosition = nil
+    selectionBox.Adornee = nil
+end
+
+local function disconnectAll()
+    for _, connection in ipairs(connections) do
+        if connection then
+            connection:Disconnect()
+        end
+    end
+
+    table.clear(connections)
+end
+
+local function unload()
+    if unloaded then
+        return
+    end
+
+    unloaded = true
+
+    stopMoving()
+    disconnectAll()
+
+    local backpackTool = player.Backpack:FindFirstChild("TelTool")
+
+    if backpackTool then
+        backpackTool:Destroy()
+    end
+
+    local character = player.Character
+
+    if character then
+        local equippedTool = character:FindFirstChild("TelTool")
+
+        if equippedTool then
+            equippedTool:Destroy()
+        end
+    end
+
+    if TelGUI then
+        TelGUI:Destroy()
+        TelGUI = nil
+    end
+
+    if selectionBox then
+        selectionBox:Destroy()
+    end
+
+    script:Destroy()
+end
+
+local function movePartVelocity(part, targetPos)
+    if not part or part.Anchored then
+        return
+    end
+
+    local direction = targetPos - part.Position
+    local velocity = direction * 15
+
+    if velocity.Magnitude > followSpeed then
+        velocity = velocity.Unit * followSpeed
+    end
+
+    part.AssemblyLinearVelocity = velocity
+end
+
+local function startMoving(part)
+    movingPart = part
+    lastPosition = part.Position
+    selectionBox.Adornee = part
+end
+
+local function togglePartMove(part)
+    if movingPart == part then
+        stopMoving()
+    elseif not part.Anchored then
+        stopMoving()
+        startMoving(part)
+    end
+end
+
+local function throwForward()
+    if not movingPart then
+        return
+    end
+
+    if not movingPart.Parent or movingPart.Anchored then
+        stopMoving()
+        return
+    end
+
+    local direction
+
+    if useCamera then
+        direction = camera.CFrame.LookVector
+    else
+        local character = player.Character
+        local root = character and character:FindFirstChild("HumanoidRootPart")
+
+        if not root then
+            return
+        end
+
+        direction = root.CFrame.LookVector
+    end
+
+    local part = movingPart
+
+    stopMoving()
+
+    part.AssemblyLinearVelocity = direction * throwPower
+end
+
+local function createTool()
+    if unloaded then
+        return
+    end
+
+    local existingTool = player.Backpack:FindFirstChild("TelTool")
+
+    if existingTool then
+        existingTool:Destroy()
+    end
+
+    local tool = Instance.new("Tool")
+    tool.Name = "TelTool"
+    tool.RequiresHandle = false
+    tool.CanBeDropped = true
+    tool.Parent = player.Backpack
+
+    local mouseConnection
+    local touchConnection
+
+    local equippedConnection = tool.Equipped:Connect(function(mouse)
+        if unloaded then
+            return
+        end
+
+        if mouse then
+            if mouseConnection then
+                mouseConnection:Disconnect()
+            end
+
+            mouseConnection = mouse.Button1Down:Connect(function()
+                if unloaded then
+                    return
+                end
+
+                local target = mouse.Target
+
+                if target and target:IsA("BasePart") and not target.Anchored then
+                    togglePartMove(target)
+                end
+            end)
+        end
+
+        if touchConnection then
+            touchConnection:Disconnect()
+        end
+
+        touchConnection = UserInputService.TouchTapInWorld:Connect(function(pos, processed)
+            if unloaded or processed then
+                return
+            end
+
+            local ray = camera:ScreenPointToRay(pos.X, pos.Y)
+
+            local params = RaycastParams.new()
+            params.FilterDescendantsInstances = {player.Character}
+            params.FilterType = Enum.RaycastFilterType.Blacklist
+
+            local result = workspace:Raycast(
+                ray.Origin,
+                ray.Direction * 1000,
+                params
+            )
+
+            if result and result.Instance and result.Instance:IsA("BasePart") and not result.Instance.Anchored then
+                togglePartMove(result.Instance)
+            end
+        end)
+    end)
+
+    local unequippedConnection = tool.Unequipped:Connect(function()
+        stopMoving()
+
+        if mouseConnection then
+            mouseConnection:Disconnect()
+            mouseConnection = nil
+        end
+
+        if touchConnection then
+            touchConnection:Disconnect()
+            touchConnection = nil
+        end
+    end)
+
+    table.insert(connections, equippedConnection)
+    table.insert(connections, unequippedConnection)
+end
+
+table.insert(connections, RunService.Heartbeat:Connect(function(deltaTime)
+    if unloaded then
+        return
+    end
+
+    if movingPart then
+        local character = player.Character
+        local root = character and character:FindFirstChild("HumanoidRootPart")
+
+        if not (root and movingPart and movingPart.Parent and not movingPart.Anchored) then
+            stopMoving()
+            return
+        end
+
+        local targetPosition
+
+        if useCamera then
+            targetPosition = camera.CFrame.Position + camera.CFrame.LookVector * followDistance
+        else
+            targetPosition = root.Position + root.CFrame.LookVector * followDistance
+        end
+
+        movePartVelocity(movingPart, targetPosition)
+
+        if (movingPart.Position - lastPosition).Magnitude > 100 then
+            stopMoving()
+            return
+        end
+
+        lastPosition = movingPart.Position
+    end
+end))
+
+local function createGUI()
+    if unloaded then
+        return
+    end
+
+    if TelGUI then
+        TelGUI:Destroy()
+    end
+
+    TelGUI = Instance.new("ScreenGui")
+    TelGUI.Name = "TelGUI"
+    TelGUI.Parent = CoreGui
+    TelGUI.ResetOnSpawn = false
+    TelGUI.DisplayOrder = 50000
+    TelGUI.ZIndexBehavior = Enum.ZIndexBehavior.Global
+
+    Frame = Instance.new("Frame")
+    Frame.Name = "Frame"
+    Frame.Parent = TelGUI
+    Frame.Active = true
+    Frame.Draggable = true
+    Frame.BackgroundColor3 = Color3.new(0.498, 0.498, 0.498)
+    Frame.BackgroundTransparency = 0.05
+    Frame.BorderColor3 = Color3.new(0.106, 0.165, 0.208)
+    Frame.BorderSizePixel = 1
+    Frame.Position = UDim2.new(0.02, 0, 0.1, 0)
+    Frame.Size = UDim2.new(0.25, 0, 0.5, 0)
+
+    DistTextBox = Instance.new("TextBox")
+    DistTextBox.Name = "DistTextBox"
+    DistTextBox.Parent = Frame
+    DistTextBox.BackgroundColor3 = Color3.new(0.624, 0.624, 0.624)
+    DistTextBox.BorderColor3 = Color3.new(0.106, 0.165, 0.208)
+    DistTextBox.BorderSizePixel = 1
+    DistTextBox.Position = UDim2.new(0.28, 0, 0.2, 0)
+    DistTextBox.Size = UDim2.new(0.45, 0, 0.2, 0)
+    DistTextBox.Text = tostring(followDistance)
+    DistTextBox.TextColor3 = Color3.new(0.106, 0.165, 0.208)
+    DistTextBox.TextSize = 8
+    DistTextBox.TextXAlignment = Enum.TextXAlignment.Center
+    DistTextBox.TextYAlignment = Enum.TextYAlignment.Center
+
+    DistPButton = Instance.new("TextButton")
+    DistPButton.Name = "DistPButton"
+    DistPButton.Parent = Frame
+    DistPButton.BackgroundColor3 = Color3.new(0.627, 0.627, 0.627)
+    DistPButton.BorderColor3 = Color3.new(0.106, 0.165, 0.208)
+    DistPButton.BorderSizePixel = 1
+    DistPButton.Position = UDim2.new(0.75, 0, 0.2, 0)
+    DistPButton.Size = UDim2.new(0.18, 0, 0.2, 0)
+    DistPButton.Text = "+"
+    DistPButton.TextColor3 = Color3.new(0.106, 0.165, 0.208)
+    DistPButton.TextScaled = true
+    DistPButton.TextWrapped = true
+
+    Throw = Instance.new("TextButton")
+    Throw.Name = "Throw"
+    Throw.Parent = Frame
+    Throw.BackgroundColor3 = Color3.new(0.627, 0.627, 0.627)
+    Throw.BorderColor3 = Color3.new(0.106, 0.165, 0.208)
+    Throw.BorderSizePixel = 1
+    Throw.Position = UDim2.new(0.08, 0, 0.69, 0)
+    Throw.Size = UDim2.new(0.85, 0, 0.23, 0)
+    Throw.Text = "Throw Forward"
+    Throw.TextColor3 = Color3.new(0.106, 0.165, 0.208)
+    Throw.TextScaled = true
+    Throw.TextWrapped = true
+
+    local UIPadding = Instance.new("UIPadding")
+    UIPadding.Name = "UIPadding"
+    UIPadding.Parent = Throw
+    UIPadding.PaddingLeft = UDim.new(0.1, 0)
+    UIPadding.PaddingRight = UDim.new(0.1, 0)
+
+    DistNButton = Instance.new("TextButton")
+    DistNButton.Name = "DistNButton"
+    DistNButton.Parent = Frame
+    DistNButton.BackgroundColor3 = Color3.new(0.627, 0.627, 0.627)
+    DistNButton.BorderColor3 = Color3.new(0.106, 0.165, 0.208)
+    DistNButton.BorderSizePixel = 1
+    DistNButton.Position = UDim2.new(0.08, 0, 0.2, 0)
+    DistNButton.Size = UDim2.new(0.18, 0, 0.2, 0)
+    DistNButton.Text = "-"
+    DistNButton.TextColor3 = Color3.new(0.106, 0.165, 0.208)
+    DistNButton.TextScaled = true
+    DistNButton.TextWrapped = true
+
+    CamFollow = Instance.new("TextButton")
+    CamFollow.Name = "CamFollow"
+    CamFollow.Parent = Frame
+    CamFollow.BackgroundColor3 = Color3.new(0.627, 0.627, 0.627)
+    CamFollow.BorderColor3 = Color3.new(0.106, 0.165, 0.208)
+    CamFollow.BorderSizePixel = 1
+    CamFollow.Position = UDim2.new(0.08, 0, 0.43, 0)
+    CamFollow.Size = UDim2.new(0.85, 0, 0.23, 0)
+    CamFollow.Text = "Camera Follow: OFF"
+    CamFollow.TextColor3 = Color3.new(0.106, 0.165, 0.208)
+    CamFollow.TextScaled = true
+    CamFollow.TextWrapped = true
+
+    TopBar = Instance.new("Frame")
+    TopBar.Name = "TopBar"
+    TopBar.Parent = Frame
+    TopBar.BackgroundColor3 = Color3.new(0.639, 0.635, 0.647)
+    TopBar.BorderColor3 = Color3.new(0.106, 0.165, 0.208)
+    TopBar.BorderSizePixel = 1
+    TopBar.Size = UDim2.new(1, 0, 0.13, 0)
+
+    Label = Instance.new("TextLabel")
+    Label.Name = "Label"
+    Label.Parent = TopBar
+    Label.BackgroundColor3 = Color3.new(0.635, 0.635, 0.635)
+    Label.BorderColor3 = Color3.new(0.106, 0.165, 0.208)
+    Label.BorderSizePixel = 1
+    Label.Size = UDim2.new(0.757, 0, 1, 0)
+    Label.Text = "Telekinesis By Ano"
+    Label.TextColor3 = Color3.new(0.106, 0.165, 0.208)
+    Label.TextScaled = true
+    Label.TextWrapped = true
+
+    CollapseButton = Instance.new("TextButton")
+    CollapseButton.Name = "CollapseButton"
+    CollapseButton.Parent = TopBar
+    CollapseButton.BackgroundColor3 = Color3.new(0.588, 0.588, 0.588)
+    CollapseButton.BorderColor3 = Color3.new(0.106, 0.165, 0.208)
+    CollapseButton.BorderSizePixel = 1
+    CollapseButton.Position = UDim2.new(0.88, 0, 0, 0)
+    CollapseButton.Size = UDim2.new(0.12, 0, 1, 0)
+    CollapseButton.Text = "V"
+    CollapseButton.TextColor3 = Color3.new(0.106, 0.165, 0.208)
+    CollapseButton.TextScaled = true
+    CollapseButton.TextWrapped = true
+
+    CloseButton = Instance.new("TextButton")
+    CloseButton.Name = "CloseButton"
+    CloseButton.Parent = TopBar
+    CloseButton.BackgroundColor3 = Color3.new(0.588, 0.588, 0.588)
+    CloseButton.BorderColor3 = Color3.new(0.106, 0.165, 0.208)
+    CloseButton.BorderSizePixel = 1
+    CloseButton.Position = UDim2.new(0.76, 0, 0, 0)
+    CloseButton.Size = UDim2.new(0.12, 0, 1, 0)
+    CloseButton.Text = "X"
+    CloseButton.TextColor3 = Color3.new(0.106, 0.165, 0.208)
+    CloseButton.TextScaled = true
+    CloseButton.TextWrapped = true
+
+    DistNButton.MouseButton1Click:Connect(function()
+        if unloaded then
+            return
+        end
+
+        followDistance = math.clamp(followDistance - 1, 1, 500000)
+        DistTextBox.Text = tostring(followDistance)
+    end)
+
+    DistPButton.MouseButton1Click:Connect(function()
+        if unloaded then
+            return
+        end
+
+        followDistance = math.clamp(followDistance + 1, 1, 500000)
+        DistTextBox.Text = tostring(followDistance)
+    end)
+
+    DistTextBox.FocusLost:Connect(function()
+        if unloaded then
+            return
+        end
+
+        local num = tonumber(DistTextBox.Text)
+
+        if num then
+            followDistance = math.clamp(num, 0.001, 500000)
+        end
+
+        DistTextBox.Text = tostring(followDistance)
+    end)
+
+    CamFollow.MouseButton1Click:Connect(function()
+        if unloaded then
+            return
+        end
+
+        useCamera = not useCamera
+        CamFollow.Text = "Camera Follow: " .. (useCamera and "ON" or "OFF")
+    end)
+
+    Throw.MouseButton1Click:Connect(function()
+        if unloaded then
+            return
+        end
+
+        throwForward()
+    end)
+
+    CloseButton.MouseButton1Click:Connect(function()
+        unload()
+    end)
+
+    CollapseButton.MouseButton1Click:Connect(function()
+        if unloaded then
+            return
+        end
+
+        collapsed = not collapsed
+
+        for _, child in ipairs(Frame:GetChildren()) do
+            if child ~= TopBar then
+                child.Visible = not collapsed
+            end
+        end
+
+        if collapsed then
+            Frame.Size = UDim2.new(0.25, 0, 0.065, 0)
+            TopBar.Size = UDim2.new(1, 0, 1, 0)
+            CollapseButton.Text = "<"
+            Frame.BackgroundTransparency = 1
+        else
+            Frame.Size = UDim2.new(0.25, 0, 0.5, 0)
+            TopBar.Size = UDim2.new(1, 0, 0.13, 0)
+            CollapseButton.Text = "V"
+            Frame.BackgroundTransparency = 0.05
+        end
+    end)
+end
+
+createTool()
+createGUI()
+
+table.insert(connections, player.CharacterAdded:Connect(function()
+    if unloaded then
+        return
+    end
+
+    createTool()
+    createGUI()
+end))
