@@ -63,7 +63,7 @@ local function unload()
     stopMoving()
     disconnectAll()
 
-    local backpackTool = player.Backpack:FindFirstChild("TelTool")
+    local backpackTool = player.Backpack:FindFirstChild("Telekinesis")
 
     if backpackTool then
         backpackTool:Destroy()
@@ -72,7 +72,7 @@ local function unload()
     local character = player.Character
 
     if character then
-        local equippedTool = character:FindFirstChild("TelTool")
+        local equippedTool = character:FindFirstChild("Telekinesis")
 
         if equippedTool then
             equippedTool:Destroy()
@@ -158,14 +158,14 @@ local function createTool()
         return
     end
 
-    local existingTool = player.Backpack:FindFirstChild("TelTool")
+    local existingTool = player.Backpack:FindFirstChild("Telekinesis")
 
     if existingTool then
         existingTool:Destroy()
     end
 
     local tool = Instance.new("Tool")
-    tool.Name = "TelTool"
+    tool.Name = "Telekinesis"
     tool.RequiresHandle = false
     tool.CanBeDropped = true
     tool.Parent = player.Backpack
