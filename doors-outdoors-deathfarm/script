@@ -1,51 +1,121 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local StarterGui = game:GetService("StarterGui")
 
 local Player = Players.LocalPlayer
-local RemotesFolder = ReplicatedStorage:WaitForChild("RemotesFolder")
-local PlayAgain = RemotesFolder:WaitForChild("PlayAgain")
-local PreRunShop = RemotesFolder:WaitForChild("PreRunShop")
+local RemotesFolder = ReplicatedStorage:WaitForChild("RemotesFolder", 5)
+local PlayAgain = RemotesFolder and RemotesFolder:WaitForChild("PlayAgain", 5)
+local PreRunShop = RemotesFolder and RemotesFolder:WaitForChild("PreRunShop", 5)
+local GameData = ReplicatedStorage:WaitForChild("GameData", 5)
+local Floor = GameData and GameData:WaitForChild("Floor", 5)
+
+local function notify(Text)
+	pcall(function()
+		StarterGui:SetCore("SendNotification", {
+			Title = "Death Farm by ano",
+			Text = Text,
+			Duration = 3
+		})
+	end)
+end
+
+notify("starting")
 
 local function runPreRunShop()
-	PreRunShop:FireServer({}, false)
+	if PreRunShop then
+		PreRunShop:FireServer({}, false)
+	end
 end
+
+notify("checking place")
 
 local QueueCode = [=[
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local StarterGui = game:GetService("StarterGui")
 
 local Player = Players.LocalPlayer
-local RemotesFolder = ReplicatedStorage:WaitForChild("RemotesFolder")
-local PlayAgain = RemotesFolder:WaitForChild("PlayAgain")
-local PreRunShop = RemotesFolder:WaitForChild("PreRunShop")
+local RemotesFolder = ReplicatedStorage:WaitForChild("RemotesFolder", 5)
+local PlayAgain = RemotesFolder and RemotesFolder:WaitForChild("PlayAgain", 5)
+local PreRunShop = RemotesFolder and RemotesFolder:WaitForChild("PreRunShop", 5)
+local GameData = ReplicatedStorage:WaitForChild("GameData", 5)
+local Floor = GameData and GameData:WaitForChild("Floor", 5)
+
+local function notify(Text)
+	pcall(function()
+		StarterGui:SetCore("SendNotification", {
+			Title = "Death Farm by ano",
+			Text = Text,
+			Duration = 3
+		})
+	end)
+end
 
 local function runPreRunShop()
-	PreRunShop:FireServer({}, false)
+	if PreRunShop then
+		PreRunShop:FireServer({}, false)
+	end
 end
 
 local QueueCode = %s
 
 local queue = queue_on_teleport or (syn and syn.queue_on_teleport) or queue_for_teleport
+
 if queue then
 	queue(string.format(QueueCode, string.format("%%q", QueueCode)))
 end
 
+notify("checking place")
+
+if not Floor or Floor.Value ~= "Garden" then
+	notify("lobby place stopping script")
+
+	if game.PlaceId == 6516141723 and RemotesFolder then
+		notify("firing createelevator")
+
+		local Event = RemotesFolder:WaitForChild("CreateElevator", 5)
+
+		if Event then
+			Event:FireServer(
+				{
+					Mods = {},
+					Settings = {},
+					Destination = "Garden",
+					FriendsOnly = false,
+					MaxPlayers = "1"
+				}
+			)
+		end
+	end
+
+	return
+end
+
+notify("garden place continuing script")
+
 local Character = Player.Character or Player.CharacterAdded:Wait()
-local Humanoid = Character:WaitForChild("Humanoid")
+local Humanoid = Character and Character:WaitForChild("Humanoid", 5)
+
+if not Humanoid or not PlayAgain then
+	return
+end
 
 runPreRunShop()
 
 if Humanoid.Health <= 0 then
+	notify("firing playagain")
 	PlayAgain:FireServer()
 else
 	task.wait(0.5)
 
 	if Humanoid.Health > 0 then
+		notify("setting health to 0")
 		Humanoid.Health = 0
 	end
 
 	Humanoid.Died:Wait()
 
+	notify("firing playagain")
 	PlayAgain:FireServer()
 end
 ]=]
@@ -53,17 +123,49 @@ end
 QueueCode = string.format(QueueCode, string.format("%q", QueueCode))
 
 local queue = queue_on_teleport or (syn and syn.queue_on_teleport) or queue_for_teleport
+
 if queue then
 	queue(QueueCode)
 end
 
+if not Floor or Floor.Value ~= "Garden" then
+	notify("lobby place stopping script")
+
+	if game.PlaceId == 6516141723 and RemotesFolder then
+		notify("firing createelevator")
+
+		local Event = RemotesFolder:WaitForChild("CreateElevator", 5)
+
+		if Event then
+			Event:FireServer(
+				{
+					Mods = {},
+					Settings = {},
+					Destination = "Garden",
+					FriendsOnly = false,
+					MaxPlayers = "1"
+				}
+			)
+		end
+	end
+
+	return
+end
+
+notify("garden place continuing script")
+
 local function start()
 	local Character = Player.Character or Player.CharacterAdded:Wait()
-	local Humanoid = Character:WaitForChild("Humanoid")
+	local Humanoid = Character and Character:WaitForChild("Humanoid", 5)
+
+	if not Humanoid or not PlayAgain then
+		return
+	end
 
 	runPreRunShop()
 
 	if Humanoid.Health <= 0 then
+		notify("firing playagain")
 		PlayAgain:FireServer()
 		return
 	end
@@ -71,11 +173,13 @@ local function start()
 	task.wait(0.5)
 
 	if Humanoid.Health > 0 then
+		notify("setting health to 0")
 		Humanoid.Health = 0
 	end
 
 	Humanoid.Died:Wait()
 
+	notify("firing playagain")
 	PlayAgain:FireServer()
 end
 
