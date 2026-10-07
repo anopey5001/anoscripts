@@ -1,0 +1,369 @@
+local HttpService = game:GetService("HttpService")
+
+local repo = "https://raw.githubusercontent.com/deividcomsono/Obsidian/main/"
+
+local Library = loadstring(game:HttpGet(repo .. "Library.lua"))()
+local ThemeManager = loadstring(game:HttpGet(repo .. "addons/ThemeManager.lua"))()
+local SaveManager = loadstring(game:HttpGet(repo .. "addons/SaveManager.lua"))()
+
+local Options = Library.Options
+local Toggles = Library.Toggles
+
+Library.ForceCheckbox = false
+Library.ShowToggleFrameInKeybinds = true
+
+local URL = "https://d2pl.anonodopro.workers.dev/"
+
+local FolderName = "D2PL"
+local KeyFile = FolderName .. "/key.txt"
+
+local function SaveKey(Key)
+    if not isfolder(FolderName) then
+        makefolder(FolderName)
+    end
+
+    writefile(KeyFile, Key)
+end
+
+local function GetSavedKey()
+    if not isfile(KeyFile) then
+        return nil
+    end
+
+    local Success, Key = pcall(function()
+        return readfile(KeyFile)
+    end)
+
+    if not Success or typeof(Key) ~= "string" then
+        return nil
+    end
+
+    Key = Key:match("^%s*(.-)%s*$")
+
+    if Key == "" then
+        return nil
+    end
+
+    return Key
+end
+
+local function DeleteSavedKey()
+    if isfile(KeyFile) then
+        delfile(KeyFile)
+    end
+end
+
+local function FetchScript(Key)
+    local Success, Response = pcall(function()
+        return HttpService:RequestAsync({
+            Url = URL,
+            Method = "POST",
+            Headers = {
+                ["Content-Type"] = "application/json"
+            },
+            Body = HttpService:JSONEncode({
+                key = Key
+            })
+        })
+    end)
+
+    if not Success then
+        return nil, "Request failed: " .. tostring(Response)
+    end
+
+    if Response.StatusCode == 403 then
+        return nil, "Key not accepted"
+    end
+
+    if not Response.Success then
+        return nil, "Server error: " .. tostring(Response.StatusCode)
+    end
+
+    return Response.Body
+end
+
+local CheckingKey = false
+
+local function LoadKey(Key, FromStartup)
+    if CheckingKey then
+        return
+    end
+
+    if typeof(Key) ~= "string" then
+        if not FromStartup then
+            Library:Notify({
+                Title = "D2PL",
+                Description = "Invalid key",
+                Time = 4
+            })
+        end
+
+        return
+    end
+
+    Key = Key:match("^%s*(.-)%s*$")
+
+    if Key == "" then
+        if not FromStartup then
+            Library:Notify({
+                Title = "D2PL",
+                Description = "Please enter a key",
+                Time = 4
+            })
+        end
+
+        return
+    end
+
+    CheckingKey = true
+
+    if FromStartup then
+        Library:Notify({
+            Title = "D2PL",
+            Description = "Checking saved key",
+            Time = 3
+        })
+    else
+        Library:Notify({
+            Title = "D2PL",
+            Description = "Checking key",
+            Time = 3
+        })
+    end
+
+    task.spawn(function()
+        local Source, Error = FetchScript(Key)
+
+        if not Source then
+            CheckingKey = false
+
+            if FromStartup then
+                DeleteSavedKey()
+
+                Library:Notify({
+                    Title = "D2PL",
+                    Description = "Saved key is invalid",
+                    Time = 5
+                })
+            else
+                Library:Notify({
+                    Title = "D2PL",
+                    Description = Error,
+                    Time = 5
+                })
+            end
+
+            return
+        end
+
+        local Function, CompileError = loadstring(Source)
+
+        if not Function then
+            CheckingKey = false
+
+            Library:Notify({
+                Title = "D2PL",
+                Description = "Failed to compile returned script",
+                Time = 5
+            })
+
+            warn(CompileError)
+
+            return
+        end
+
+        SaveKey(Key)
+
+        CheckingKey = false
+
+        Library:Notify({
+            Title = "D2PL",
+            Description = "Key accepted",
+            Time = 3
+        })
+
+        Library:Unload()
+
+        task.wait()
+
+        local Success, RuntimeError = pcall(function()
+            Function(Key)
+        end)
+
+        if not Success then
+            warn(RuntimeError)
+        end
+    end)
+end
+
+local Window = Library:CreateWindow({
+    Title = "D2PL",
+    Footer = "Key System",
+    NotifySide = "Right",
+    ShowCustomCursor = true,
+    Center = true,
+    AutoShow = true,
+    Resizable = false
+})
+
+local Tabs = {
+    Key = Window:AddKeyTab("Key"),
+    ["UI Settings"] = Window:AddTab("Settings", "settings")
+}
+
+local KeyTab = Tabs.Key
+
+KeyTab:AddLabel({
+    Text = "D2PL Key System",
+    DoesWrap = true,
+    Size = 30
+})
+
+KeyTab:AddLabel({
+    Text = "Enter your key below to continue",
+    DoesWrap = true,
+    Size = 16
+})
+
+KeyTab:AddKeyBox(function(ReceivedKey)
+    LoadKey(ReceivedKey, false)
+end)
+
+KeyTab:AddLabel({
+    Text = "Key key key key 😱😱😱😱😱",
+    DoesWrap = true,
+    Size = 14
+})
+
+local SettingsGroup = Tabs["UI Settings"]:AddGroupbox({
+    Side = "Left",
+    Name = "Menu"
+})
+
+SettingsGroup:AddToggle("KeybindMenuOpen", {
+    Text = "Open Keybind Menu",
+    Default = Library.KeybindFrame.Visible,
+    Callback = function(Value)
+        Library.KeybindFrame.Visible = Value
+    end
+})
+
+SettingsGroup:AddToggle("ShowCustomCursor", {
+    Text = "Custom Cursor",
+    Default = Library.ShowCustomCursor,
+    Callback = function(Value)
+        Library.ShowCustomCursor = Value
+    end
+})
+
+SettingsGroup:AddToggle("AlwaysOnTop", {
+    Text = "Always On Top",
+    Default = Window.AlwaysOnTop,
+    Callback = function(Value)
+        Window:SetAlwaysOnTop(Value)
+    end
+})
+
+SettingsGroup:AddDropdown("NotificationSide", {
+    Values = {
+        "Left",
+        "Right"
+    },
+    Default = "Right",
+    Text = "Notification Side",
+    Callback = function(Value)
+        Library:SetNotifySide(Value)
+    end
+})
+
+SettingsGroup:AddDropdown("DPIDropdown", {
+    Values = {
+        "50%",
+        "75%",
+        "100%",
+        "125%",
+        "150%",
+        "175%",
+        "200%"
+    },
+    Default = "100%",
+    Text = "DPI Scale",
+    Callback = function(Value)
+        Value = Value:gsub("%%", "")
+
+        local DPI = tonumber(Value)
+
+        if DPI then
+            Library:SetDPIScale(DPI)
+        end
+    end
+})
+
+SettingsGroup:AddSlider("UICornerSlider", {
+    Text = "Corner Radius",
+    Default = Library.CornerRadius,
+    Min = 0,
+    Max = 20,
+    Rounding = 0,
+    Callback = function(Value)
+        Window:SetCornerRadius(Value)
+    end
+})
+
+SettingsGroup:AddDivider()
+
+SettingsGroup:AddLabel("Menu bind")
+    :AddKeyPicker("MenuKeybind", {
+        Default = "RightShift",
+        NoUI = true,
+        Text = "Menu keybind"
+    })
+
+SettingsGroup:AddButton({
+    Text = "Unload",
+    Func = function()
+        Library:Unload()
+    end
+})
+
+Library.ToggleKeybind = Options.MenuKeybind
+
+Library:OnUnload(function()
+    print("D2PL unloaded")
+end)
+
+-- Theme Manager
+
+ThemeManager:SetLibrary(Library)
+
+ThemeManager:SetFolder("D2PL")
+
+ThemeManager:ApplyToTab(Tabs["UI Settings"])
+
+-- Save Manager
+
+SaveManager:SetLibrary(Library)
+
+SaveManager:IgnoreThemeSettings()
+
+SaveManager:SetIgnoreIndexes({
+    "MenuKeybind"
+})
+
+SaveManager:SetFolder("D2PL")
+
+SaveManager:SetSubFolder("Settings")
+
+SaveManager:BuildConfigSection(Tabs["UI Settings"])
+
+SaveManager:LoadAutoloadConfig()
+
+-- Check saved key after the UI has finished loading
+
+task.defer(function()
+    local SavedKey = GetSavedKey()
+
+    if SavedKey then
+        LoadKey(SavedKey, true)
+    end
+end)
