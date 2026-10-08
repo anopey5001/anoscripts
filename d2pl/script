@@ -3,8 +3,6 @@ local HttpService = game:GetService("HttpService")
 local repo = "https://raw.githubusercontent.com/deividcomsono/Obsidian/main/"
 
 local Library = loadstring(game:HttpGet(repo .. "Library.lua"))()
-local ThemeManager = loadstring(game:HttpGet(repo .. "addons/ThemeManager.lua"))()
-local SaveManager = loadstring(game:HttpGet(repo .. "addons/SaveManager.lua"))()
 
 local Options = Library.Options
 local Toggles = Library.Toggles
@@ -84,6 +82,9 @@ end
 
 local CheckingKey = false
 
+local Cooldown = 5 -- seconds
+local LastAttempt = 0
+
 local function LoadKey(Key, FromStartup)
     if CheckingKey then
         return
@@ -113,6 +114,22 @@ local function LoadKey(Key, FromStartup)
         end
 
         return
+    end
+
+    if not FromStartup then
+        local Remaining = Cooldown - (os.clock() - LastAttempt)
+
+        if Remaining > 0 then
+            Library:Notify({
+                Title = "D2PL",
+                Description = string.format("Please wait %.1fs", Remaining),
+                Time = 2
+            })
+
+            return
+        end
+
+        LastAttempt = os.clock()
     end
 
     CheckingKey = true
@@ -331,32 +348,6 @@ Library.ToggleKeybind = Options.MenuKeybind
 Library:OnUnload(function()
     print("D2PL unloaded")
 end)
-
--- Theme Manager
-
-ThemeManager:SetLibrary(Library)
-
-ThemeManager:SetFolder("D2PL")
-
-ThemeManager:ApplyToTab(Tabs["UI Settings"])
-
--- Save Manager
-
-SaveManager:SetLibrary(Library)
-
-SaveManager:IgnoreThemeSettings()
-
-SaveManager:SetIgnoreIndexes({
-    "MenuKeybind"
-})
-
-SaveManager:SetFolder("D2PL")
-
-SaveManager:SetSubFolder("Settings")
-
-SaveManager:BuildConfigSection(Tabs["UI Settings"])
-
-SaveManager:LoadAutoloadConfig()
 
 -- Check saved key after the UI has finished loading
 
