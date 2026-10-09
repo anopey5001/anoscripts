@@ -247,7 +247,7 @@ KeyTab:AddKeyBox(function(ReceivedKey)
 end)
 
 KeyTab:AddLabel({
-    Text = "Key key key key 😱😱😱😱😱",
+    Text = "Key key key key 😱😱😱",
     DoesWrap = true,
     Size = 14
 })
@@ -346,7 +346,7 @@ SettingsGroup:AddButton({
 Library.ToggleKeybind = Options.MenuKeybind
 
 Library:OnUnload(function()
-    print("D2PL unloaded")
+    print("D2PL key menu died not script")
 end)
 
 -- Check saved key after the UI has finished loading
