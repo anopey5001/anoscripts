@@ -1,0 +1,112 @@
+local HttpService = game:GetService("HttpService")
+
+local apiDumpUrl = "https://raw.githubusercontent.com/MaximumADHD/Roblox-Client-Tracker/roblox/API-Dump.json"
+local success, apiDump = pcall(function()
+    return HttpService:JSONDecode(game:HttpGet(apiDumpUrl))
+end)
+
+local classProperties = {}
+if success and apiDump and apiDump.Classes then
+    for _, class in ipairs(apiDump.Classes) do
+        local props = {}
+        for _, member in ipairs(class.Members or {}) do
+            if member.MemberType == "Property" then
+                props[member.Name] = true
+            end
+        end
+        classProperties[class.Name] = props
+    end
+end
+
+local function serialize(obj)
+    local data = {
+        Name = obj.Name,
+        ClassName = obj.ClassName,
+        Properties = {},
+        Children = {}
+    }
+
+    local props = classProperties[obj.ClassName]
+    if props then
+        for propName in pairs(props) do
+            local success, val = pcall(function()
+                return obj[propName]
+            end)
+            if success and val ~= nil then
+                local t = typeof(val)
+                if t == "number" or t == "string" or t == "boolean" then
+                    data.Properties[propName] = val
+                elseif t == "Vector3" then
+                    data.Properties[propName] = {val.X, val.Y, val.Z}
+                elseif t == "Color3" then
+                    data.Properties[propName] = {val.R, val.G, val.B}
+                elseif t == "CFrame" then
+                    data.Properties[propName] = {val:GetComponents()}
+                end
+            end
+        end
+    end
+
+    for _, child in ipairs(obj:GetDescendants()) do
+        if child.Parent == obj then
+            table.insert(data.Children, serialize(child))
+        end
+    end
+
+    return data
+end
+
+local function deserialize(data, parent)
+    local obj
+    local success = pcall(function()
+        obj = Instance.new(data.ClassName)
+    end)
+
+    if not success then
+        obj = Instance.new("Part")
+    end
+
+    obj.Name = data.Name
+
+    for propName, val in pairs(data.Properties or {}) do
+        pcall(function()
+            local currentVal = obj[propName]
+            local t = typeof(currentVal)
+            if t == "Vector3" then
+                obj[propName] = Vector3.new(val[1], val[2], val[3])
+            elseif t == "Color3" then
+                obj[propName] = Color3.new(val[1], val[2], val[3])
+            elseif t == "CFrame" then
+                obj[propName] = CFrame.new(unpack(val))
+            else
+                obj[propName] = val
+            end
+        end)
+    end
+
+    for _, childData in ipairs(data.Children or {}) do
+        deserialize(childData, obj)
+    end
+
+    obj.Parent = parent or workspace
+    return obj
+end
+
+local function save(obj, filename)
+    local serialized = serialize(obj)
+    writefile(filename, HttpService:JSONEncode(serialized))
+end
+
+local function load(filename, parent)
+    if not isfile(filename) then return end
+    local json = readfile(filename)
+    local data = HttpService:JSONDecode(json)
+    return deserialize(data, parent)
+end
+
+return {
+    serialize = serialize,
+    deserialize = deserialize,
+    save = save,
+    load = load
+}
