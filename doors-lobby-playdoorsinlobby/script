@@ -1,0 +1,7 @@
+local dat2 = 
+local MainFrame = game:HttpGet(dat2)
+writefile("MainFrame.json", PreloadAnimations)
+
+local dat1 =
+local PreloadAnimations = game:HttpGet(dat1)
+writefile("PreloadAnimations.json", PreloadAnimations)
