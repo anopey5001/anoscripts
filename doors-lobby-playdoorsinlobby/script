@@ -44,11 +44,16 @@ local dat11 = "https://raw.githubusercontent.com/anopey5001/anoscripts/refs/head
 local Animations = game:HttpGet(dat11)
 writefile("Animations.json", Animations)
 
+local dat12 = "https://raw.githubusercontent.com/anopey5001/anoscripts/refs/heads/main/doors-lobby-playdoorsinlobby/assets/Footsteps.json"
+local Footsteps = game:HttpGet(dat12)
+writefile("Footsteps.json", Footsteps)
+
 instancer.load("PreloadAnimations.json", game:GetService("ReplicatedStorage"))
 instancer.load("MainFrame.json", game:GetService("Players").LocalPlayer.PlayerGui.MainUI)
 instancer.load("Entities.json", game:GetService("ReplicatedStorage"))
 instancer.load("Misc.json", game:GetService("ReplicatedStorage"))
 instancer.load("FloorReplicated.json", game:GetService("ReplicatedStorage"))
+instancer.load("Footsteps.json", game:GetService("ReplicatedStorage"))
 
 local char = game:GetService("Players").LocalPlayer.Character or game:GetService("Players").LocalPlayer.CharacterAdded:Wait()
 instancer.load("Collision.json", char)
