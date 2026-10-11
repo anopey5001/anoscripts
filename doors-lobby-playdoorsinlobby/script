@@ -24,6 +24,26 @@ local dat6 = "https://raw.githubusercontent.com/anopey5001/anoscripts/refs/heads
 local Collision = game:HttpGet(dat6)
 writefile("Collision.json", Collision)
 
+local dat7 = "https://raw.githubusercontent.com/anopey5001/anoscripts/refs/heads/main/doors-lobby-playdoorsinlobby/assets/_GripApproximate.json"
+local GripApprox = game:HttpGet(dat7)
+writefile("__GripApproximate.json", GripApprox)
+
+local dat8 = "https://raw.githubusercontent.com/anopey5001/anoscripts/refs/heads/main/doors-lobby-playdoorsinlobby/assets/BodyGyro.json"
+local BodyGyro = game:HttpGet(dat8)
+writefile("BodyGyro.json", BodyGyro)
+
+local dat9 = "https://raw.githubusercontent.com/anopey5001/anoscripts/refs/heads/main/doors-lobby-playdoorsinlobby/assets/FallbackGrip.json"
+local FallbackGrip = game:HttpGet(dat9)
+writefile("FallbackGrip.json", FallbackGrip)
+
+local dat10 = "https://raw.githubusercontent.com/anopey5001/anoscripts/refs/heads/main/doors-lobby-playdoorsinlobby/assets/JumpSound.json"
+local JumpSound = game:HttpGet(dat10)
+writefile("JumpSound.json", JumpSound)
+
+local dat11 = "https://raw.githubusercontent.com/anopey5001/anoscripts/refs/heads/main/doors-lobby-playdoorsinlobby/assets/Animations.json"
+local Animations = game:HttpGet(dat11)
+writefile("Animations.json", Animations)
+
 instancer.load("PreloadAnimations.json", game:GetService("ReplicatedStorage"))
 instancer.load("MainFrame.json", game:GetService("Players").LocalPlayer.PlayerGui.MainUI)
 instancer.load("Entities.json", game:GetService("ReplicatedStorage"))
@@ -32,10 +52,18 @@ instancer.load("FloorReplicated.json", game:GetService("ReplicatedStorage"))
 
 local char = game:GetService("Players").LocalPlayer.Character or game:GetService("Players").LocalPlayer.CharacterAdded:Wait()
 instancer.load("Collision.json", char)
+instancer.load("Animations.json", char)
+
+local collisionPart = char:WaitForChild("CollisionPart")
+
+instancer.load("__GripApproximate.json", collisionPart)
+instancer.load("BodyGyro.json", collisionPart)
+instancer.load("FallbackGrip.json", collisionPart)
+instancer.load("JumpSound.json", collisionPart)
 
 local weld = char:FindFirstChild("Collision", true) and char:FindFirstChild("Collision", true):FindFirstChildOfClass("Weld")
 if weld then
-    weld.Part1 = char:WaitForChild("CollisionPart")
+    weld.Part1 = collisionPart
 end
 
 char:SetAttribute("Oxygen", 100)
