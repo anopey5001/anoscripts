@@ -16,9 +16,28 @@ local dat4 = "https://raw.githubusercontent.com/anopey5001/anoscripts/refs/heads
 local Misc = game:HttpGet(dat4)
 writefile("Misc.json", Misc)
 
+local dat5 = "https://raw.githubusercontent.com/anopey5001/anoscripts/refs/heads/main/doors-lobby-playdoorsinlobby/assets/FloorReplicated.json"
+local FloorReplicated = game:HttpGet(dat5)
+writefile("FloorReplicated.json", FloorReplicated)
+
+local dat6 = "https://raw.githubusercontent.com/anopey5001/anoscripts/refs/heads/main/doors-lobby-playdoorsinlobby/assets/Collision.json"
+local Collision = game:HttpGet(dat6)
+writefile("Collision.json", Collision)
+
 instancer.load("PreloadAnimations.json", game:GetService("ReplicatedStorage"))
 instancer.load("MainFrame.json", game:GetService("Players").LocalPlayer.PlayerGui.MainUI)
 instancer.load("Entities.json", game:GetService("ReplicatedStorage"))
 instancer.load("Misc.json", game:GetService("ReplicatedStorage"))
+instancer.load("FloorReplicated.json", game:GetService("ReplicatedStorage"))
+
+local char = game:GetService("Players").LocalPlayer.Character or game:GetService("Players").LocalPlayer.CharacterAdded:Wait()
+instancer.load("Collision.json", char)
+
+local weld = char:FindFirstChild("Collision", true) and char:FindFirstChild("Collision", true):FindFirstChildOfClass("Weld")
+if weld then
+    weld.Part1 = char:WaitForChild("CollisionPart")
+end
+
+char:SetAttribute("Oxygen", 100)
 
 require(game:GetService("Players").LocalPlayer.PlayerGui.MainUI.Initiator.Main_Game)
