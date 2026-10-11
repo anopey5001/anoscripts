@@ -1,7 +1,23 @@
-local dat2 = 
-local MainFrame = game:HttpGet(dat2)
-writefile("MainFrame.json", PreloadAnimations)
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+local playergui = player:WaitForChild("PlayerGui")
 
-local dat1 =
+local dat2 = "https://raw.githubusercontent.com/anopey5001/anoscripts/refs/heads/main/doors-lobby-playdoorsinlobby/assets/MainFrame.json"
+local MainFrame = game:HttpGet(dat2)
+writefile("MainFrame.json", MainFrame)
+
+local dat1 = "https://raw.githubusercontent.com/anopey5001/anoscripts/refs/heads/main/doors-lobby-playdoorsinlobby/assets/PreloadAnimations.json"
 local PreloadAnimations = game:HttpGet(dat1)
 writefile("PreloadAnimations.json", PreloadAnimations)
+
+local instancer = loadstring(game:HttpGet("https://raw.githubusercontent.com/anopey5001/anoscripts/refs/heads/main/instance-saver-loader/script"))()
+
+instancer.load("PreloadAnimations.json", ReplicatedStorage)
+instancer.load("MainFrame.json", playergui:WaitForChild("MainUI"))
+
+local mainUI = playergui:WaitForChild("MainUI")
+local initiator = mainUI:WaitForChild("initiator")
+local mainGame = initiator:WaitForChild("Main_Game")
+
+require(mainGame)
