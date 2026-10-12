@@ -72,5 +72,7 @@ if weld then
 end
 
 char:SetAttribute("Oxygen", 100)
+char:SetAttribute("SpeedBoost", 0)
+char:SetAttribute("SpeedBoostBehind", 0)
 
 require(game:GetService("Players").LocalPlayer.PlayerGui.MainUI.Initiator.Main_Game)
