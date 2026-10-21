@@ -51,7 +51,35 @@ local function DeleteSavedKey()
     end
 end
 
+-- get hwid 😱😱😱
+
+local function GetHwid()
+    local Success, Id = pcall(function()
+        return game:GetService("RbxAnalyticsService"):GetClientId()
+    end)
+
+    if Success and typeof(Id) == "string" and Id ~= "" then
+        return Id
+    end
+
+    return nil
+end
+
+-- translate messages so user understands
+local RejectMessages = {
+    ["key expired"] = "Key expired",
+    ["hwid mismatch"] = "Key is locked to another device (ask for an HWID reset)",
+    ["hwid required"] = "Could not read your HWID",
+}
+
+-- returns Source Error Rejected 
 local function FetchScript(Key)
+    local Hwid = GetHwid()
+
+    if not Hwid then
+        return nil, "Could not read your HWID", false
+    end
+
     local Success, Response = pcall(function()
         return HttpService:RequestAsync({
             Url = URL,
@@ -60,21 +88,24 @@ local function FetchScript(Key)
                 ["Content-Type"] = "application/json"
             },
             Body = HttpService:JSONEncode({
-                key = Key
+                key = Key,
+                hwid = Hwid
             })
         })
     end)
 
     if not Success then
-        return nil, "Request failed: " .. tostring(Response)
+        return nil, "Request failed: " .. tostring(Response), false
     end
 
     if Response.StatusCode == 403 then
-        return nil, "Key not accepted"
+        local Body = tostring(Response.Body or ""):lower()
+
+        return nil, RejectMessages[Body] or "Key not accepted", true
     end
 
     if not Response.Success then
-        return nil, "Server error: " .. tostring(Response.StatusCode)
+        return nil, "Server error: " .. tostring(Response.StatusCode), false
     end
 
     return Response.Body
@@ -82,7 +113,7 @@ end
 
 local CheckingKey = false
 
-local Cooldown = 5 -- seconds
+local Cooldown = 5 
 local LastAttempt = 0
 
 local function LoadKey(Key, FromStartup)
@@ -149,17 +180,20 @@ local function LoadKey(Key, FromStartup)
     end
 
     task.spawn(function()
-        local Source, Error = FetchScript(Key)
+        local Source, Error, Rejected = FetchScript(Key)
 
         if not Source then
             CheckingKey = false
 
             if FromStartup then
-                DeleteSavedKey()
+                -- key suicides ONLY after server rejected 😭 not when getting ghosted
+                if Rejected then
+                    DeleteSavedKey()
+                end
 
                 Library:Notify({
                     Title = "D2PL",
-                    Description = "Saved key is invalid",
+                    Description = Rejected and ("Saved key: " .. Error) or Error,
                     Time = 5
                 })
             else
@@ -349,7 +383,7 @@ Library:OnUnload(function()
     print("D2PL key menu died not script")
 end)
 
--- Check saved key after the UI has finished loading
+-- check when load
 
 task.defer(function()
     local SavedKey = GetSavedKey()
