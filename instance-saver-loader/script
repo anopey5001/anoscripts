@@ -1,112 +1,236 @@
 local HttpService = game:GetService("HttpService")
+local CollectionService = game:GetService("CollectionService")
 
-local apiDumpUrl = "https://raw.githubusercontent.com/MaximumADHD/Roblox-Client-Tracker/roblox/API-Dump.json"
-local success, apiDump = pcall(function()
-    return HttpService:JSONDecode(game:HttpGet(apiDumpUrl))
-end)
+local API_URL = "https://raw.githubusercontent.com/MaximumADHD/Roblox-Client-Tracker/roblox/API-Dump.json"
 
-local classProperties = {}
-if success and apiDump and apiDump.Classes then
-    for _, class in ipairs(apiDump.Classes) do
-        local props = {}
-        for _, member in ipairs(class.Members or {}) do
-            if member.MemberType == "Property" then
-                props[member.Name] = true
-            end
-        end
-        classProperties[class.Name] = props
-    end
+local classes = {}
+do
+	local ok, dump = pcall(function()
+		return HttpService:JSONDecode(game:HttpGet(API_URL))
+	end)
+	assert(ok and type(dump) == "table" and dump.Classes, "instancer: couldn't download the API dump")
+	for _, c in ipairs(dump.Classes) do classes[c.Name] = c end
 end
 
-local function serialize(obj)
-    local data = {
-        Name = obj.Name,
-        ClassName = obj.ClassName,
-        Properties = {},
-        Children = {}
-    }
+local function securityOk(s)
+	if s == nil then return true end
+	if type(s) == "string" then return s == "None" end
+	return s.Read == "None" and s.Write == "None"
+end
 
-    local props = classProperties[obj.ClassName]
-    if props then
-        for propName in pairs(props) do
-            local success, val = pcall(function()
-                return obj[propName]
-            end)
-            if success and val ~= nil then
-                local t = typeof(val)
-                if t == "number" or t == "string" or t == "boolean" then
-                    data.Properties[propName] = val
-                elseif t == "Vector3" then
-                    data.Properties[propName] = {val.X, val.Y, val.Z}
-                elseif t == "Color3" then
-                    data.Properties[propName] = {val.R, val.G, val.B}
-                elseif t == "CFrame" then
-                    data.Properties[propName] = {val:GetComponents()}
-                end
-            end
-        end
-    end
+local function hasTag(member, tag)
+	for _, t in ipairs(member.Tags or {}) do
+		if t == tag then return true end
+	end
+	return false
+end
 
-    for _, child in ipairs(obj:GetDescendants()) do
-        if child.Parent == obj then
-            table.insert(data.Children, serialize(child))
-        end
-    end
+local propCache = {}
+local function propertyNames(className)
+	if propCache[className] then return propCache[className] end
+	local names, seen = {}, {}
+	local c = classes[className]
+	while c do             
+		for _, m in ipairs(c.Members or {}) do
+			if m.MemberType == "Property" and not seen[m.Name] then
+				seen[m.Name] = true
+				local canSave = not (m.Serialization and m.Serialization.CanSave == false)
+				if canSave and securityOk(m.Security)
+					and not hasTag(m, "ReadOnly") and not hasTag(m, "NotScriptable") and not hasTag(m, "Deprecated")
+					and m.Name ~= "Parent" and m.Name ~= "Name" then
+					names[#names + 1] = m.Name
+				end
+			end
+		end
+		c = c.Superclass and classes[c.Superclass]
+	end
+	propCache[className] = names
+	return names
+end
 
-    return data
+local defaults = {}
+local function defaultFor(className)
+	if defaults[className] == nil then
+		local ok, inst = pcall(Instance.new, className)
+		defaults[className] = ok and inst or false
+	end
+	return defaults[className]
+end
+
+local function num(n)
+	if n ~= n then return "nan" elseif n == math.huge then return "inf" elseif n == -math.huge then return "-inf" end
+	return n
+end
+local function unnum(n)
+	if n == "nan" then return 0 / 0 elseif n == "inf" then return math.huge elseif n == "-inf" then return -math.huge end
+	return n
+end
+local function nums(...)
+	local o = {}
+	for i, x in ipairs({ ... }) do o[i] = num(x) end
+	return o
+end
+local function un(a)
+	local o = {}
+	for i, x in ipairs(a) do o[i] = unnum(x) end
+	return o
+end
+
+local function enumName(e)
+	return (tostring(e.EnumType):gsub("^Enum%.", ""))
+end
+
+local function encode(v)
+	local t = typeof(v)
+	if t == "boolean" or t == "string" then
+		return v
+	elseif t == "number" then
+		if v ~= v or math.abs(v) == math.huge then return { t = "number", v = num(v) } end
+		return v
+	elseif t == "Vector3" then return { t = t, v = nums(v.X, v.Y, v.Z) }
+	elseif t == "Vector2" then return { t = t, v = nums(v.X, v.Y) }
+	elseif t == "Color3" then return { t = t, v = nums(v.R, v.G, v.B) }
+	elseif t == "CFrame" then return { t = t, v = nums(v:GetComponents()) }
+	elseif t == "UDim" then return { t = t, v = nums(v.Scale, v.Offset) }
+	elseif t == "UDim2" then return { t = t, v = nums(v.X.Scale, v.X.Offset, v.Y.Scale, v.Y.Offset) }
+	elseif t == "Rect" then return { t = t, v = nums(v.Min.X, v.Min.Y, v.Max.X, v.Max.Y) }
+	elseif t == "BrickColor" then return { t = t, v = v.Number }
+	elseif t == "NumberRange" then return { t = t, v = nums(v.Min, v.Max) }
+	elseif t == "EnumItem" then return { t = t, enum = enumName(v), name = v.Name }
+	elseif t == "Font" then return { t = t, family = v.Family, weight = v.Weight.Name, style = v.Style.Name }
+	elseif t == "NumberSequence" then
+		local k = {}
+		for i, p in ipairs(v.Keypoints) do k[i] = nums(p.Time, p.Value, p.Envelope) end
+		return { t = t, v = k }
+	elseif t == "ColorSequence" then
+		local k = {}
+		for i, p in ipairs(v.Keypoints) do k[i] = nums(p.Time, p.Value.R, p.Value.G, p.Value.B) end
+		return { t = t, v = k }
+	end
+	return nil                                    
+end
+
+local function decode(v, current)
+	if type(v) ~= "table" then return v end
+	local t = v.t
+	if not t then
+		local ct = typeof(current)
+		if ct == "Vector3" then return Vector3.new(table.unpack(v))
+		elseif ct == "Color3" then return Color3.new(table.unpack(v))
+		elseif ct == "CFrame" then return CFrame.new(table.unpack(v)) end
+		return nil
+	end
+	local a = v.v
+	local n = type(a) == "table" and un(a) or a
+	if t == "number" then return unnum(a)
+	elseif t == "Vector3" then return Vector3.new(n[1], n[2], n[3])
+	elseif t == "Vector2" then return Vector2.new(n[1], n[2])
+	elseif t == "Color3" then return Color3.new(n[1], n[2], n[3])
+	elseif t == "CFrame" then return CFrame.new(table.unpack(n))
+	elseif t == "UDim" then return UDim.new(n[1], n[2])
+	elseif t == "UDim2" then return UDim2.new(n[1], n[2], n[3], n[4])
+	elseif t == "Rect" then return Rect.new(n[1], n[2], n[3], n[4])
+	elseif t == "BrickColor" then return BrickColor.new(a)
+	elseif t == "NumberRange" then return NumberRange.new(n[1], n[2])
+	elseif t == "EnumItem" then return Enum[v.enum][v.name]
+	elseif t == "Font" then return Font.new(v.family, Enum.FontWeight[v.weight], Enum.FontStyle[v.style])
+	elseif t == "NumberSequence" then
+		local k = {}
+		for i, p in ipairs(a) do k[i] = NumberSequenceKeypoint.new(unnum(p[1]), unnum(p[2]), unnum(p[3])) end
+		return NumberSequence.new(k)
+	elseif t == "ColorSequence" then
+		local k = {}
+		for i, p in ipairs(a) do
+			k[i] = ColorSequenceKeypoint.new(unnum(p[1]), Color3.new(unnum(p[2]), unnum(p[3]), unnum(p[4])))
+		end
+		return ColorSequence.new(k)
+	end
+	return nil
+end
+
+
+local function serialize(obj, opts)
+	local skipDefaults = not (opts and opts.skipDefaults == false)
+
+	local function walk(o)
+		local data = { Name = o.Name, ClassName = o.ClassName, Properties = {}, Children = {} }
+		local def = skipDefaults and defaultFor(o.ClassName) or nil
+
+		for _, prop in ipairs(propertyNames(o.ClassName)) do
+			local ok, val = pcall(function() return o[prop] end)
+			if ok and val ~= nil then
+				local atDefault = false
+				if def then
+					local okd, dv = pcall(function() return def[prop] end)
+					atDefault = okd and dv == val
+				end
+				if not atDefault then
+					local enc = encode(val)
+					if enc ~= nil then data.Properties[prop] = enc end
+				end
+			end
+		end
+
+		local attrs = o:GetAttributes()
+		if next(attrs) then
+			data.Attributes = {}
+			for k, v in pairs(attrs) do
+				local enc = encode(v)
+				if enc ~= nil then data.Attributes[k] = enc end
+			end
+		end
+		local tags = CollectionService:GetTags(o)
+		if #tags > 0 then data.Tags = tags end
+
+		for _, child in ipairs(o:GetChildren()) do
+			data.Children[#data.Children + 1] = walk(child)
+		end
+		return data
+	end
+
+	return walk(obj)
 end
 
 local function deserialize(data, parent)
-    local obj
-    local success = pcall(function()
-        obj = Instance.new(data.ClassName)
-    end)
+	local ok, obj = pcall(Instance.new, data.ClassName)
+	if not ok then
+		warn("instancer: can't create " .. tostring(data.ClassName) .. " ('" .. tostring(data.Name) .. "'), skipped")
+		return nil
+	end
+	obj.Name = data.Name
 
-    if not success then
-        obj = Instance.new("Part")
-    end
+	for prop, val in pairs(data.Properties or {}) do
+		pcall(function()
+			local value = decode(val, obj[prop])
+			if value ~= nil then obj[prop] = value end
+		end)
+	end
+	for k, v in pairs(data.Attributes or {}) do
+		local value = decode(v)
+		if value ~= nil then obj:SetAttribute(k, value) end
+	end
+	for _, tag in ipairs(data.Tags or {}) do CollectionService:AddTag(obj, tag) end
 
-    obj.Name = data.Name
+	for _, childData in ipairs(data.Children or {}) do
+		deserialize(childData, obj)               
+	end
 
-    for propName, val in pairs(data.Properties or {}) do
-        pcall(function()
-            local currentVal = obj[propName]
-            local t = typeof(currentVal)
-            if t == "Vector3" then
-                obj[propName] = Vector3.new(val[1], val[2], val[3])
-            elseif t == "Color3" then
-                obj[propName] = Color3.new(val[1], val[2], val[3])
-            elseif t == "CFrame" then
-                obj[propName] = CFrame.new(unpack(val))
-            else
-                obj[propName] = val
-            end
-        end)
-    end
-
-    for _, childData in ipairs(data.Children or {}) do
-        deserialize(childData, obj)
-    end
-
-    obj.Parent = parent or workspace
-    return obj
+	obj.Parent = parent
+	return obj
 end
 
-local function save(obj, filename)
-    local serialized = serialize(obj)
-    writefile(filename, HttpService:JSONEncode(serialized))
+local function save(obj, filename, opts)
+	writefile(filename, HttpService:JSONEncode(serialize(obj, opts)))
 end
 
 local function load(filename, parent)
-    if not isfile(filename) then return end
-    local json = readfile(filename)
-    local data = HttpService:JSONDecode(json)
-    return deserialize(data, parent)
+	if not isfile(filename) then return nil end
+	return deserialize(HttpService:JSONDecode(readfile(filename)), parent)
 end
 
 return {
-    serialize = serialize,
-    deserialize = deserialize,
-    save = save,
-    load = load
+	serialize = serialize,
+	deserialize = deserialize,
+	save = save,
+	load = load,
 }
